@@ -9,8 +9,6 @@ app = FastAPI()
 
 # Render uses PORT environment variable
 PORT = int(os.environ.get("PORT", 6677))
-
-# Use 0.0.0.0 for Render
 HOST = "0.0.0.0"
 
 Key, Iv = b'Yg&tc%DEuh6%Zc^8', b'6oyZDr22E3ychjM%'
@@ -25,35 +23,43 @@ def DEc_AEs(HeX):
 
 @app.api_route("/ver.php", methods=["GET", "POST"])
 async def manual(request: Request):
-    print("🔄 ver.php called")
-    target = "https://version.ggwhitehawk.com/live/ver.php"
-
-    headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in ("host", "content-length", "connection")
+    print("🔄 ver.php called - Returning hardcoded config")
+    
+    # Hardcoded response with code: 2 (what game expects)
+    response_data = {
+        "code": 2,
+        "use_login_optional_download": False,
+        "use_background_download": False,
+        "use_background_download_lobby": False,
+        "country_code": "IN",
+        "client_ip": "127.0.0.1",
+        "gdpr_version": 0,
+        "billboard_cdn_url": "",
+        "billboard_msg": "",
+        "web_url": "",
+        "billboard_bg_url": "",
+        "max_store": "",
+        "max_web": "",
+        "max_video": "",
+        "patchnote_url": "",
+        "multi_region": "",
+        "appstore_url": "http://www.freefiremobile.com/",
+        "backup_appstore_url": "",
+        "garena_login": False,
+        "garena_hint": False,
+        "gop_url": "",
+        "gamevar": "var_name,comment,var_type,var_value\nvar_name,comment,\"var_type float, int, bool\",var_value\nANODisabledRegions,\u5173\u95edMTP\u7684\u5730\u533a,string,\"IND,NA\"\nANODisabledClientVariant,ANODisabledClientVariant,string,\"ClientUsingVersion_MAX_HPE,ClientUsingVersion_FFI,ClientUsingVersion_MAX|IND,ClientUsingVersion_MAX|NA,ClientUsingVersion_NORMAL|NA\"\nEnableMtpLiteDataRegion,mtp\u8f7b\u7279\u5f81\u5f00\u5173,string,\"BR,EUROPE,ID,ME,US,RU,SAC,SG,TH,TW,VN,PK,ZA,BD\"\nANOEmulatorCheckDisbaledClientVariant,ANOEmulatorCheckDisbaledClientVariant,string,\"ClientUsingVersion_FFI,ClientUsingVersion_MAX,ClientUsingVersion_NORMAL\"\nForceTutorial_ChangeHudABTest,fps\u6d41\u7a0b\u4e2d\u6253\u5f00hud\u9009\u62e9\u754c\u9762\u7684\u6982\u7387,float,-1\n",
+        "device_whitelist_version": "1.6.0",
+        "whitelist_mask": 0,
+        "device_whitelist_sp_version": "1.0.0",
+        "whitelist_sp_mask": 0,
+        "ggp_url": f"http://{request.headers.get('host', '127.0.0.1:6677')}"
     }
-
-    async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-        r = await client.request(
-            request.method,
-            target,
-            params=dict(request.query_params),
-            headers=headers,
-            content=await request.body()
-        )
-
-    data = r.json()
-    # Use Render URL or localhost
-    render_url = os.environ.get("RENDER_URL", "http://127.0.0.1:6677")
-    data["server_url"] = f"{render_url}/"
-
-    HOP_BY_HOP = {'transfer-encoding', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailers', 'upgrade', 'proxy-connection'}
-    response_headers = {
-        k: v for k, v in r.headers.items()
-        if k.lower() not in HOP_BY_HOP and k.lower() not in ("content-length", "content-encoding")
-    }
-
-    return JSONResponse(content=data, status_code=r.status_code, headers=response_headers)
+    
+    print(f"📝 Returning config with code: {response_data['code']}")
+    print(f"📝 ggp_url: {response_data['ggp_url']}")
+    
+    return JSONResponse(content=response_data, status_code=200)
 
 @app.api_route("/MajorLogin", methods=["POST"])
 async def MajorLoginProxy(request: Request):
@@ -68,6 +74,7 @@ async def MajorLoginProxy(request: Request):
         
         print(f"✅ Access Token: {acess_token}")
         print(f"✅ Open ID: {open_id}")
+        print(f"📋 Full data: {json.dumps(x7m, indent=2)}")
         
         nikomLhnoud = f""" [b][c][279CF5]
 
@@ -87,7 +94,7 @@ async def MajorLoginProxy(request: Request):
 
         return Response(
             content=nikomLhnoud,
-            status_code=500,
+            status_code=200,  # Changed from 500 to 200
             media_type="application/octet-stream"
         )
         
@@ -97,25 +104,67 @@ async def MajorLoginProxy(request: Request):
         traceback.print_exc()
         return Response(
             content="Error",
-            status_code=500,
+            status_code=200,
             media_type="application/octet-stream"
         )
+
+@app.api_route("/GetLoginData", methods=["POST"])
+async def GetLoginDataProxy(request: Request):
+    print("📥 GetLoginData received")
+    body = await request.body()
+    print(f"📦 Body length: {len(body)} bytes")
+    
+    try:
+        decrypted = get_available_room(decrypt_api(body.hex()))
+        x7m = json.loads(decrypted)
+        print(f"🔓 Decrypted: {json.dumps(x7m, indent=2)}")
+        
+        acess_token = x7m.get("29", "NOT FOUND")
+        open_id = x7m.get("22", "NOT FOUND")
+        
+        if acess_token != "NOT FOUND":
+            print(f"✅ Access Token: {acess_token}")
+            print(f"✅ Open ID: {open_id}")
+    except Exception as e:
+        print(f"⚠️ Could not decrypt: {e}")
+    
+    # Return success response
+    return Response(
+        content=b"",
+        status_code=200,
+        headers={
+            "Content-Type": "application/octet-stream",
+            "Connection": "close"
+        }
+    )
+
+@app.api_route("/Ping", methods=["POST"])
+async def ping():
+    print("📥 Ping received")
+    return Response(content=b"", status_code=200)
 
 @app.api_route("/", methods=["GET"])
 async def root():
     return JSONResponse({
         "status": "running",
         "server": "PARAHEX",
-        "endpoints": ["/ver.php", "/MajorLogin"]
+        "endpoints": ["/ver.php", "/MajorLogin", "/GetLoginData", "/Ping"]
     })
 
 @app.api_route("/health", methods=["GET"])
 async def health():
     return JSONResponse({"status": "healthy"})
 
+# Catch all other requests
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def catch_all(request: Request, path: str):
+    print(f"🔄 Catch-all: {path}")
+    return Response(content=b"", status_code=200)
+
 if __name__ == "__main__":
     print(f"\n🚀 Starting server on http://{HOST}:{PORT}")
-    print(f"📡 ver.php -> https://version.ggwhitehawk.com/live/ver.php")
+    print(f"📡 ver.php -> Hardcoded config with code: 2")
     print(f"📡 MajorLogin -> Capture token")
+    print(f"📡 GetLoginData -> Capture token")
     print("="*80 + "\n")
     uvicorn.run(app, host=HOST, port=PORT, log_level='info')
